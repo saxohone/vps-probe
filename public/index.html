@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📡 VPS 探针</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>📡</text></svg>">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --card: #10161f;
+    --border: #1c2735;
+    --border-hi: #2e4160;
+    --text: #dce5f0;
+    --muted: #7d8da3;
+    --dim: #516078;
+    --cyan: #36cfc9;
+    --purple: #b37feb;
+    --down: #4ade80;
+    --up: #f472b6;
+    --good: #4ade80;
+    --mid: #facc15;
+    --bad: #f87171;
+    --fail: #64748b;
+    --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh; color: var(--text);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "MiSans", "Microsoft YaHei", sans-serif;
+    background:
+      radial-gradient(1000px 520px at 5% -12%, rgba(54, 207, 201, .10), transparent 62%),
+      radial-gradient(1100px 620px at 98% 112%, rgba(179, 127, 235, .10), transparent 62%),
+      var(--bg);
+    background-attachment: fixed;
+    padding: 22px clamp(12px, 3vw, 36px) 40px;
+  }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ================= 头部 ================= */
+  header { max-width: 1440px; margin: 0 auto 20px; }
+  .brand { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  h1 {
+    font-size: 24px; font-weight: 800; letter-spacing: .5px;
+    background: linear-gradient(92deg, #7ee7e2, #36cfc9 40%, #b37feb);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .conn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; padding: 3px 12px; border-radius: 99px;
+    border: 1px solid var(--border); color: var(--muted); transition: color .3s, border-color .3s;
+  }
+  .conn::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+  .conn.live { color: var(--good); border-color: rgba(74, 222, 128, .35); }
+  .conn.live::before { background: var(--good); animation: pulse 1.6s ease-in-out infinite; }
+  .conn.err { color: var(--bad); border-color: rgba(248, 113, 113, .4); }
+  .conn.err::before { background: var(--bad); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(74, 222, 128, .5); }
+    50% { opacity: .5; box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
+  }
+  .clock { margin-left: auto; font-size: 12px; color: var(--dim); }
+
+  .stats {
+    display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap;
+  }
+  .stat {
+    flex: 1; min-width: 150px;
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)) , var(--card);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; display: flex; flex-direction: column; gap: 3px;
+  }
+  .stat .k { font-size: 11px; color: var(--muted); letter-spacing: 1px; }
+  .stat .v { font-size: 20px; font-weight: 700; font-family: var(--mono); }
+  .stat .v small { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .stat .v .down { color: var(--down); } .stat .v .up { color: var(--up); }
+  .stat .v.cy { color: var(--cyan); } .stat .v.pu { color: var(--purple); }
+
+  /* ================= 卡片 ================= */
+  .grid { max-width: 1440px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); }
+  .card {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0)), var(--card);
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px 14px;
+    transition: border-color .25s, transform .25s, box-shadow .25s, filter .4s, opacity .4s;
+  }
+  .card:hover { border-color: var(--border-hi); transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+  .card.offline { opacity: .62; filter: grayscale(.75); }
+
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .name {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    font-size: 15px; font-weight: 700; letter-spacing: .3px;
+    white-space: nowrap;
+  }
+  .name .dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px rgba(74,222,128,.8); animation: pulse 2.2s infinite; }
+  .card.offline .name .dot { background: var(--fail); box-shadow: none; animation: none; }
+  .name .txt { overflow: hidden; text-overflow: ellipsis; }
+  .name .id { color: var(--dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
+  .ping {
+    font-family: var(--mono); font-size: 12.5px; padding: 2.5px 11px; border-radius: 99px;
+    flex-shrink: 0; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ping::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .ping.good { color: var(--good); border-color: rgba(74,222,128,.3); background: rgba(74,222,128,.07); }
+  .ping.mid  { color: var(--mid);  border-color: rgba(250,204,21,.3);  background: rgba(250,204,21,.07); }
+  .ping.bad  { color: var(--bad);  border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.07); }
+  .ping.fail { color: var(--fail); border-color: var(--border); }
+
+  .sub { margin: 5px 0 0 16px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .metrics { display: flex; gap: 16px; margin-top: 13px; align-items: center; }
+  .rings { display: flex; gap: 12px; flex-shrink: 0; }
+  .ring { width: 66px; text-align: center; }
+  .ring svg { width: 66px; height: 66px; display: block; }
+  .ring .bg { fill: none; stroke: #1a2432; stroke-width: 7; }
+  .ring .fg { fill: none; stroke-width: 7; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; transition: stroke-dashoffset .6s cubic-bezier(.3,.7,.3,1); }
+  .ring text { fill: var(--text); font-size: 14px; font-weight: 700; text-anchor: middle; font-family: var(--mono); }
+  .ring .label { font-size: 10.5px; color: var(--muted); margin-top: 3px; letter-spacing: 2px; }
+
+  .nets { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .chartrow .rowline { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 3px; }
+  .chartrow .dir { color: var(--muted); }
+  .chartrow .dir.down { color: var(--down); } .chartrow .dir.up { color: var(--up); }
+  .chartrow .rate { font-family: var(--mono); color: var(--text); font-weight: 600; }
+  .chartrow canvas { width: 100%; height: 28px; display: block; }
+  .chartrow.pingc canvas { height: 26px; }
+
+  .pinggrid { margin-top: 12px; display: grid; gap: 8px; }
+  .pinggrid .dir b { color: var(--text); font-weight: 600; }
+
+  .footer {
+    margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted);
+  }
+  .footer b { color: var(--text); font-weight: 600; font-family: var(--mono); }
+  .diskwrap { display: flex; align-items: center; gap: 6px; }
+  .diskbar { width: 52px; height: 5px; border-radius: 3px; background: #1a2432; overflow: hidden; }
+  .diskbar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #38bdf8, #818cf8); transition: width .6s; }
+
+  .offbadge {
+    position: absolute; top: 13px; right: -34px; transform: rotate(38deg); z-index: 3;
+    background: linear-gradient(90deg, #b91c1c, #7f1d1d); color: #fecaca;
+    font-size: 11px; padding: 3px 40px; letter-spacing: 2px; box-shadow: 0 2px 10px rgba(0,0,0,.5);
+  }
+
+  .empty { max-width: 1440px; margin: 48px auto; text-align: center; color: var(--muted); font-size: 14px; line-height: 2.4; }
+  .empty code { background: var(--card); border: 1px solid var(--border); padding: 2px 10px; border-radius: 6px; color: var(--cyan); font-size: 12.5px; }
+  footer.page { max-width: 1440px; margin: 28px auto 0; text-align: center; font-size: 11.5px; color: var(--dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>📡 VPS 探针</h1>
+    <span class="conn" id="conn">连接中…</span>
+    <span class="clock mono" id="clock"></span>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="k">在线机器</span><span class="v"><span id="stOnline">0</span><small> / <span id="stTotal">0</span></small></span></div>
+    <div class="stat"><span class="k">实时下行</span><span class="v down" id="stIn">0 B/s</span></div>
+    <div class="stat"><span class="k">实时上行</span><span class="v up" id="stOut">0 B/s</span></div>
+    <div class="stat"><span class="k">累计总流量</span><span class="v cy" id="stBytes">0 B</span></div>
+    <div class="stat"><span class="k">TCP 总连接</span><span class="v pu" id="stTcp">0</span></div>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+<div class="empty" id="empty" style="display:none">
+  还没有任何机器上报数据<br>
+  去 VPS 上跑起来：<code>./agent.sh http://服务端地址:8790 你的TOKEN 机器名</code>
+</div>
+
+<footer class="page">zero-dependency probe · node server.js · MIT</footer>
+
+<script>
+(function () {
+  'use strict';
+  var grid = document.getElementById('grid');
+  var empty = document.getElementById('empty');
+  var connEl = document.getElementById('conn');
+  var clockEl = document.getElementById('clock');
+
+  /* ---------- 格式化 ---------- */
+  function fmtRate(bps) {
+    if (!isFinite(bps) || bps < 0) bps = 0;
+    if (bps < 1024) return bps.toFixed(0) + ' B/s';
+    if (bps < 1048576) return (bps / 1024).toFixed(1) + ' KB/s';
+    if (bps < 1073741824) return (bps / 1048576).toFixed(2) + ' MB/s';
+    return (bps / 1073741824).toFixed(2) + ' GB/s';
+  }
+  function fmtBytes(b) {
+    b = Math.max(0, b);
+    if (b < 1048576) return (b / 1024).toFixed(0) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(0) + ' MB';
+    if (b < 1099511627776) return (b / 1073741824).toFixed(2) + ' GB';
+    return (b / 1099511627776).toFixed(2) + ' TB';
+  }
+  function fmtUptime(sec) {
+    var d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60);
+    if (d > 0) return d + '天' + h + '时';
+    if (h > 0) return h + '时' + m + '分';
+    return m + '分';
+  }
+  function fmtAgo(sec) {
+    if (sec < 60) return sec + 's 前';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm 前';
+    return Math.floor(sec / 3600) + 'h 前';
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pingTier(p) { return p < 0 ? 'fail' : p < 80 ? 'good' : p < 180 ? 'mid' : 'bad'; }
+  function pingColor(tier) { return { good: '#4ade80', mid: '#facc15', bad: '#f87171', fail: '#64748b' }[tier]; }
+  function pingText(p) { return p < 0 ? '超时' : p.toFixed(1) + ' ms'; }
+
+  var CIRC = 2 * Math.PI * 30;
+
+  function ringHTML(pct, color, glow, label) {
+    pct = Math.max(0, Math.min(100, pct || 0));
+    return '<div class="ring">' +
+      '<svg viewBox="0 0 72 72">' +
+      '<circle class="bg" cx="36" cy="36" r="30"/>' +
+      '<circle class="fg" cx="36" cy="36" r="30" stroke="' + color + '" style="filter:drop-shadow(0 0 3px ' + glow + ')" stroke-dasharray="' + CIRC + '" stroke-dashoffset="' + (CIRC * (1 - pct / 100)) + '"/>' +
+      '<text x="36" y="41">' + Math.round(pct) + '%</text>' +
+      '</svg><div class="label">' + label + '</div></div>';
+  }
+
+  /* ---------- 渲染 ---------- */
+  function render(data) {
+    var ms = data.machines || [];
+    empty.style.display = ms.length ? 'none' : 'block';
+    grid.style.display = ms.length ? 'grid' : 'none';
+
+    var online = 0, sumIn = 0, sumOut = 0, sumBytes = 0, sumTcp = 0;
+    ms.forEach(function (m) {
+      if (m.online) { online++; sumIn += m.inRate; sumOut += m.outRate; }
+      sumBytes += Math.max(0, m.rxBytes) + Math.max(0, m.txBytes);
+      sumTcp += m.tcpConns;
+    });
+    document.getElementById('stOnline').textContent = online;
+    document.getElementById('stTotal').textContent = ms.length;
+    document.getElementById('stIn').textContent = fmtRate(sumIn);
+    document.getElementById('stOut').textContent = fmtRate(sumOut);
+    document.getElementById('stBytes').textContent = fmtBytes(sumBytes);
+    document.getElementById('stTcp').textContent = sumTcp;
+    clockEl.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+
+    var html = ms.map(function (m) {
+      var diskPct = m.diskTotal > 0 ? m.diskUsed / m.diskTotal * 100 : 0;
+      var tier = pingTier(m.ping);
+      var sub = [m.os, m.virt && m.virt !== 'unknown' ? m.virt : '', m.cpuCount ? m.cpuCount + 'C' : '']
+        .filter(Boolean).join(' · ');
+      var pingGone = (m.hist.ping || []).filter(function (p) { return p < 0; }).length;
+      return '<div class="card' + (m.online ? '' : ' offline') + '" data-id="' + esc(m.id) + '">' +
+        (m.online ? '' : '<div class="offbadge">OFFLINE</div>') +
+        '<div class="head">' +
+          '<div class="name"><span class="dot"></span><span class="txt">' + esc(m.name) + '<span class="id">' + esc(m.id) + '</span></span></div>' +
+          '<div class="ping ' + tier + '">' + pingText(m.ping) + '</div>' +
+        '</div>' +
+        '<div class="sub">' + esc(sub) + (m.cpuModel ? ' · ' + esc(m.cpuModel) : '') + '</div>' +
+        '<div class="metrics">' +
+          '<div class="rings">' + ringHTML(m.cpuPct, '#36cfc9', 'rgba(54,207,201,.55)', 'CPU') + ringHTML(m.memPct, '#b37feb', 'rgba(179,127,235,.55)', 'MEM') + '</div>' +
+          '<div class="nets">' +
+            '<div class="chartrow"><div class="rowline"><span class="dir down">↓ 下行</span><span class="rate">' + fmtRate(m.inRate) + '</span></div><canvas data-k="netIn"></canvas></div>' +
+            '<div class="chartrow"><div class="rowline"><span class="dir up">↑ 上行</span><span class="rate">' + fmtRate(m.outRate) + '</span></div><canvas data-k="netOut"></canvas></div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="pinggrid">' +
+          '<div class="chartrow pingc"><div class="rowline"><span class="dir">延迟监控 · CN 方向' + (pingGone ? ' · <b style="color:var(--bad)">' + pingGone + ' 次超时</b>' : '') + '</span><span class="rate" style="color:' + pingColor(tier) + '">' + pingText(m.ping) + '</span></div><canvas data-k="ping"></canvas></div>' +
+        '</div>' +
+        '<div class="footer">' +
+          '<span>负载 <b>' + (+m.load1).toFixed(2) + '</b></span>' +
+          '<span class="diskwrap">磁盘 <b>' + Math.round(diskPct) + '%</b><span class="diskbar"><i style="width:' + Math.min(100, diskPct) + '%"></i></span><span class="mono">' + fmtBytes(m.diskUsed) + '/' + fmtBytes(m.diskTotal) + '</span></span>' +
+          '<span>TCP <b>' + m.tcpConns + '</b></span>' +
+          '<span>运行 <b>' + fmtUptime(m.uptime) + '</b></span>' +
+          '<span><span style="color:var(--down)">↓</span><b>' + fmtBytes(m.rxBytes) + '</b> <span style="color:var(--up)">↑</span><b>' + fmtBytes(m.txBytes) + '</b></span>' +
+          (m.online ? '' : '<span style="color:var(--bad)">最后在线 ' + fmtAgo(m.lastSeenSec) + '</span>') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    grid.innerHTML = html;
+
+    requestAnimationFrame(function () {
+      ms.forEach(function (m) {
+        var card = grid.querySelector('.card[data-id="' + CSS.escape(m.id) + '"]');
+        if (!card) return;
+        card.querySelectorAll('canvas').forEach(function (cv) {
+          var key = cv.getAttribute('data-k');
+          var hist = m.hist[key] || [];
+          if (key === 'netIn') spark(cv, hist, '#4ade80');
+          else if (key === 'netOut') spark(cv, hist, '#f472b6');
+          else pingChart(cv, hist, pingColor(tier));
+        });
+      });
+    });
+  }
+
+  /* ---------- 网络波形 ---------- */
+  function spark(cv, data, color) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = cv.clientWidth || 200, h = cv.clientHeight || 30;
+    cv.width = w * dpr; cv.height = h * dpr;
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!data.length) return;
+
+    var n = data.length;
+    var max = Math.max.apply(null, data);
+    if (max < 1e-6) max = 1;
+    var X = function (i) { return n === 1 ? 1 : 1 + i / (n - 1) * (w - 2); };
+    var Y = function (v) { return h - 2.5 - Math.min(1, v / max) * (h - 8); };
+
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(data[0]));
+    for (var i = 1; i < n; i++) ctx.lineTo(X(i), Y(data[i]));
+    ctx.lineTo(X(n - 1), h); ctx.lineTo(X(0), h); ctx.closePath();
+    var g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, color + '3d'); g.addColorStop(1, color + '00');
+    ctx.fillStyle = g; ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(data[0]));
+    for (var j = 1; j < n; j++) ctx.lineTo(X(j), Y(data[j]));
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(X(n - 1), Y(data[n - 1]), 2.2, 0, 7);
+    ctx.fillStyle = color; ctx.fill();
+  }
+
+  /* ---------- 延迟监控图：超时点画底部红叉 ---------- */
+  function pingChart(cv, data, color) {
+    var dpr = window.devicePixelRatio || 1;
+    var w = cv.clientWidth || 200, h = cv.clientHeight || 26;
+    cv.width = w * dpr; cv.height = h * dpr;
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    // 参考网格：20 / 100 / 180 ms 三条基线（量程随数据自适应）
+    var valid = data.filter(function (p) { return p >= 0; });
+    var maxV = Math.max(60, Math.max.apply(null, valid.concat([0])) * 1.2);
+    function Y(v) { return h - 3 - Math.min(1, v / maxV) * (h - 8); }
+    [20, 80, 180].forEach(function (lv) {
+      if (lv > maxV) return;
+      ctx.strokeStyle = 'rgba(125,141,163,.12)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(1, Y(lv)); ctx.lineTo(w - 1, Y(lv)); ctx.stroke();
+    });
+
+    if (!data.length) return;
+    var n = data.length;
+    var X = function (i) { return n === 1 ? 1 : 1 + i / (n - 1) * (w - 2); };
+
+    // 折线：遇到超时则断线
+    ctx.beginPath();
+    var pen = false;
+    for (var i = 0; i < n; i++) {
+      if (data[i] < 0) { pen = false; continue; }
+      if (!pen) { ctx.moveTo(X(i), Y(data[i])); pen = true; }
+      else ctx.lineTo(X(i), Y(data[i]));
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke();
+
+    // 超时标记：底部红叉
+    for (var t = 0; t < n; t++) {
+      if (data[t] >= 0) continue;
+      var x = X(t), y = h - 4;
+      ctx.strokeStyle = 'rgba(248,113,113,.9)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x - 2.5, y - 2.5); ctx.lineTo(x + 2.5, y + 2.5);
+      ctx.moveTo(x + 2.5, y - 2.5); ctx.lineTo(x - 2.5, y + 2.5);
+      ctx.stroke();
+    }
+
+    // 末点
+    var last = -1;
+    for (var k = n - 1; k >= 0; k--) if (data[k] >= 0) { last = k; break; }
+    if (last >= 0) {
+      ctx.beginPath();
+      ctx.arc(X(last), Y(data[last]), 2.2, 0, 7);
+      ctx.fillStyle = color; ctx.fill();
+    }
+  }
+
+  /* ---------- SSE ---------- */
+  var es = new EventSource('/api/stream');
+  es.onopen = function () { connEl.textContent = '实时'; connEl.className = 'conn live'; };
+  es.onerror = function () { connEl.textContent = '重连中…'; connEl.className = 'conn err'; };
+  es.onmessage = function (e) { try { render(JSON.parse(e.data)); } catch (_) {} };
+})();
+</script>
+</body>
+</html>
