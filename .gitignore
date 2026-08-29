@@ -4,6 +4,9 @@ state.json
 nohup.out
 *.pid
 
+# 工具状态
+.mimosa/
+
 # 系统文件
 .DS_Store
 Thumbs.db
