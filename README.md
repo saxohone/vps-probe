@@ -29,7 +29,7 @@
 任意一台有公网 IP 的机器（NAS、家宽小鸡都行）：
 
 ```bash
-git clone https://github.com/<你>/vps-probe && cd vps-probe
+git clone https://github.com/saxohone/vps-probe && cd vps-probe
 TOKEN=换成你自己的密钥 PORT=8790 node server.js
 ```
 
@@ -75,7 +75,7 @@ location / {
 ## Agent（每台被监控的 VPS）
 
 ```bash
-curl -sL https://raw.githubusercontent.com/<你>/vps-probe/main/agent.sh -o agent.sh
+curl -sL https://raw.githubusercontent.com/saxohone/vps-probe/main/agent.sh -o agent.sh
 chmod +x agent.sh
 
 # 前台试跑，确认面板出现卡片
