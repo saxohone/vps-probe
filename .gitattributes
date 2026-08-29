@@ -4,3 +4,4 @@
 *.js   text eol=lf
 *.html text eol=lf
 *.md   text eol=lf
+*.bat  text eol=crlf
