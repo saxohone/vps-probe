@@ -63,6 +63,12 @@
     50% { opacity: .5; box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
   }
   .clock { margin-left: auto; font-size: 12px; color: var(--dim); }
+  .adminlink {
+    font-size: 12px; color: var(--muted); text-decoration: none;
+    border: 1px solid var(--border); border-radius: 99px; padding: 3px 12px;
+    transition: color .18s, border-color .18s;
+  }
+  .adminlink:hover { color: var(--cyan); border-color: rgba(54,207,201,.4); }
 
   .stats { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
   .stat {
@@ -112,6 +118,7 @@
   .name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
   .name .dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px rgba(74,222,128,.8); animation: pulse 2.2s infinite; }
   .card.offline .name .dot { background: var(--fail); box-shadow: none; animation: none; }
+  .name .cflag { font-size: 16px; margin-right: 5px; line-height: 1; }
   .name .txt { overflow: hidden; text-overflow: ellipsis; }
   .name .id { color: var(--dim); font-weight: 400; font-size: 11px; margin-left: 6px; }
   .up-rate { font-family: var(--mono); font-size: 12px; color: var(--muted); flex-shrink: 0; }
@@ -139,11 +146,11 @@
   .pingsec { margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--border); }
   .pinghead { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 7px; }
   .pinghead .to { color: var(--bad); font-family: var(--mono); }
-  .isps { display: flex; gap: 8px; }
-  .isp { flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px 4px; background: rgba(0,0,0,.18); }
-  .isp .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; margin-bottom: 3px; }
-  .isp .who { letter-spacing: .5px; }
-  .isp .val { font-family: var(--mono); font-weight: 700; font-size: 12px; }
+  .isps { display: flex; gap: 8px; flex-wrap: wrap; }
+  .isp { flex: 1 1 90px; min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px 4px; background: rgba(0,0,0,.18); }
+  .isp .top { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; margin-bottom: 3px; gap: 4px; }
+  .isp .who { letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .isp .val { font-family: var(--mono); font-weight: 700; font-size: 12px; white-space: nowrap; }
   .isp canvas { width: 100%; height: 22px; display: block; }
 
   .footer { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); }
@@ -169,6 +176,7 @@
   <div class="brand">
     <h1>📡 VPS 探针</h1>
     <span class="conn" id="conn">连接中…</span>
+    <a class="adminlink" href="/admin">⚙ 管理</a>
     <span class="clock mono" id="clock"></span>
   </div>
   <div class="stats">
@@ -210,11 +218,9 @@
   var clockEl = document.getElementById('clock');
   var qEl = document.getElementById('q');
 
-  var ISPS = [
-    { key: 'pingCt', who: '电信', color: '#38bdf8' },
-    { key: 'pingCu', who: '联通', color: '#fb923c' },
-    { key: 'pingCm', who: '移动', color: '#a78bfa' }
-  ];
+  // 探测目标由服务端下发（管理面板可增删改），这里只读当前帧的 targets
+  function targets() { return (state.data && state.data.targets) || []; }
+  function histKey(id) { return 'p_' + id; }
 
   var state = { data: null, sort: 'default', q: '' };
 
@@ -269,7 +275,8 @@
     var q = state.q.trim().toLowerCase();
     if (q) {
       ms = ms.filter(function (m) {
-        return (m.name + ' ' + m.id + ' ' + m.os + ' ' + m.cpuModel + ' ' + m.virt).toLowerCase().indexOf(q) >= 0;
+        return (m.name + ' ' + m.id + ' ' + m.os + ' ' + m.cpuModel + ' ' + m.virt +
+                ' ' + (m.countryName || '') + ' ' + (m.country || '')).toLowerCase().indexOf(q) >= 0;
       });
     }
     var s = state.sort;
@@ -319,23 +326,34 @@
 
   function cardHTML(m) {
     var diskPct = m.diskTotal > 0 ? m.diskUsed / m.diskTotal * 100 : 0;
-    var sub = [m.os, m.virt && m.virt !== 'unknown' ? m.virt : '', m.cpuCount ? m.cpuCount + 'C' : ''].filter(Boolean).join(' · ');
+    var ts = targets();
+    var sub = [
+      m.countryName || '',
+      m.os,
+      m.virt && m.virt !== 'unknown' ? m.virt : '',
+      m.cpuCount ? m.cpuCount + 'C' : ''
+    ].filter(Boolean).join(' · ');
     var timeouts = 0;
-    ISPS.forEach(function (isp) { (m.hist[isp.key] || []).forEach(function (v) { if (v < 0) timeouts++; }); });
+    ts.forEach(function (t) {
+      (m.hist[histKey(t.id)] || []).forEach(function (v) { if (v < 0) timeouts++; });
+    });
     var upPct = m.uptimePct;
     var upColor = upPct >= 99.5 ? 'var(--good)' : upPct >= 95 ? 'var(--mid)' : 'var(--bad)';
 
-    var ispHTML = ISPS.map(function (isp) {
-      var v = m[isp.key];
-      return '<div class="isp"><div class="top"><span class="who" style="color:' + isp.color + '">' + isp.who + '</span>' +
+    var ispHTML = ts.map(function (t) {
+      var v = (m.pings || {})[t.id];
+      if (v === undefined) v = -1;
+      return '<div class="isp"><div class="top"><span class="who" style="color:' + esc(t.color) + '">' + esc(t.label) + '</span>' +
         '<span class="val" style="color:' + tierColor(tierOf(v)) + '">' + pingText(v) + '</span></div>' +
-        '<canvas data-k="' + isp.key + '"></canvas></div>';
+        '<canvas data-k="' + esc(histKey(t.id)) + '"></canvas></div>';
     }).join('');
 
     return '<div class="card' + (m.online ? '' : ' offline') + '" data-id="' + esc(m.id) + '">' +
       (m.online ? '' : '<div class="offbadge">OFFLINE</div>') +
       '<div class="head">' +
-        '<div class="name"><span class="dot"></span><span class="txt">' + esc(m.name) + '<span class="id">' + esc(m.id) + '</span></span></div>' +
+        '<div class="name"><span class="dot"></span><span class="txt">' +
+          '<span class="cflag" title="' + esc(m.countryName || '未知') + '">' + esc(m.flag || '🌐') + '</span>' +
+          esc(m.name) + '<span class="id">' + esc(m.id) + '</span></span></div>' +
         '<div class="up-rate">可用 <b style="color:' + upColor + '">' + upPct.toFixed(2) + '%</b></div>' +
       '</div>' +
       '<div class="sub">' + esc(sub) + (m.cpuModel ? ' · ' + esc(m.cpuModel) : '') + '</div>' +
@@ -346,10 +364,11 @@
           '<div class="chartrow"><div class="rowline"><span class="dir up">↑ 上行</span><span class="rate">' + fmtRate(m.outRate) + '</span></div><canvas data-k="netOut"></canvas></div>' +
         '</div>' +
       '</div>' +
-      '<div class="pingsec">' +
-        '<div class="pinghead"><span>三网延迟监控</span>' + (timeouts ? '<span class="to">近 60 采样 ' + timeouts + ' 次超时</span>' : '<span style="color:var(--dim)">无丢包</span>') + '</div>' +
+      (ts.length ? '<div class="pingsec">' +
+        '<div class="pinghead"><span>TCPing 延迟 · ' + ts.length + ' 个目标</span>' +
+        (timeouts ? '<span class="to">近 60 采样 ' + timeouts + ' 次超时</span>' : '<span style="color:var(--dim)">无丢包</span>') + '</div>' +
         '<div class="isps">' + ispHTML + '</div>' +
-      '</div>' +
+      '</div>' : '') +
       '<div class="footer">' +
         '<span>负载 <b>' + (+m.load1).toFixed(2) + '</b></span>' +
         '<span class="diskwrap">磁盘 <b>' + Math.round(diskPct) + '%</b><span class="diskbar"><i style="width:' + Math.min(100, diskPct) + '%"></i></span><span class="mono">' + fmtBytes(m.diskUsed) + '/' + fmtBytes(m.diskTotal) + '</span></span>' +
@@ -362,6 +381,8 @@
   }
 
   function paintCharts(ms) {
+    var byHistKey = {};
+    targets().forEach(function (t) { byHistKey[histKey(t.id)] = t; });
     ms.forEach(function (m) {
       var card = grid.querySelector('.card[data-id="' + CSS.escape(m.id) + '"]');
       if (!card) return;
@@ -370,10 +391,7 @@
         var hist = m.hist[key] || [];
         if (key === 'netIn') spark(cv, hist, '#4ade80');
         else if (key === 'netOut') spark(cv, hist, '#f472b6');
-        else {
-          var isp = ISPS.filter(function (x) { return x.key === key; })[0];
-          if (isp) pingChart(cv, hist, isp.color);
-        }
+        else if (byHistKey[key]) pingChart(cv, hist, byHistKey[key].color);
       });
     });
   }
